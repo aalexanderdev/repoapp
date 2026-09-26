@@ -1,0 +1,232 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+jobs:
+  # 1. Build y test de la aplicación
+  build-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Instalar dependencias
+        run: pip install -r app/requirements-dev.txt
+
+      - name: Lint (flake8)
+        run: flake8 app --max-line-length=100
+
+      - name: Tests unitarios con cobertura
+        run: pytest app/tests --cov=app --cov-report=xml
+
+      - name: Subir reporte de cobertura
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+  # 2. SAST - análisis estático de seguridad del código
+  sast:
+    name: SAST (Bandit + CodeQL)
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bandit (análisis estático Python)
+        run: |
+          pip install bandit
+          bandit -r app -f json -o bandit-report.json || true
+
+      - name: Subir reporte de Bandit
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+
+      - name: Inicializar CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+
+      - name: Ejecutar análisis CodeQL
+        uses: github/codeql-action/analyze@v3
+
+  # 3. Construcción y push de la imagen Docker
+  docker-build-push:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    needs: [build-test, sast]
+    if: github.ref == 'refs/heads/main'
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login al registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Metadatos de la imagen
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build y push (multi-stage)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Escaneo de vulnerabilidades de la imagen (Trivy)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+
+      - name: Subir resultados de Trivy a Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
+  # 4. Provisionamiento de infraestructura con Terraform
+  terraform:
+    name: Terraform Plan & Apply
+    runs-on: ubuntu-latest
+    needs: docker-build-push
+    if: github.ref == 'refs/heads/main'
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: |
+          if [ -n "${{ secrets.TF_STATE_BUCKET }}" ]; then
+            terraform init \
+              -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+              -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE || 'devops-pipeline-demo-locks' }}" \
+              -backend-config="region=us-east-1"
+          else
+            terraform init
+          fi
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+
+  # 5. Despliegue en Kubernetes
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: terraform
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Actualizar kubeconfig
+        run: aws eks update-kubeconfig --region us-east-1 --name devops-pipeline-demo-dev
+
+      - name: Aplicar manifiestos
+        run: |
+          kubectl apply -f k8s/00-namespace.yaml
+          kubectl apply -f k8s/05-resource-quota.yaml
+          kubectl apply -f k8s/01-deployment.yaml
+          kubectl apply -f k8s/02-service.yaml
+          kubectl apply -f k8s/03-ingress.yaml
+          kubectl apply -f k8s/04-hpa.yaml
+
+      - name: Actualizar imagen del deployment
+        run: |
+          kubectl set image deployment/demo-app \
+            demo-app=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            -n demo-app
+
+      - name: Esperar rollout
+        run: kubectl rollout status deployment/demo-app -n demo-app --timeout=120s
+
+  # 6. DAST - análisis dinámico contra la app ya desplegada
+  dast:
+    name: DAST (OWASP ZAP)
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Escaneo dinámico con OWASP ZAP
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: "https://demo-app.midominio.com"
+          fail_action: false
+          cmd_options: "-a"
+
+      - name: Subir reporte ZAP
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: report_html.html
