@@ -1,0 +1,7 @@
+# Ejemplo de configuración para el backend remoto S3 + DynamoDB
+# Uso local: terraform init -backend-config=backend.tfvars
+bucket         = "devops-pipeline-demo-tfstate-TU_ACCOUNT_ID"
+key            = "devops-pipeline-demo/terraform.tfstate"
+region         = "us-east-1"
+dynamodb_table = "devops-pipeline-demo-locks"
+encrypt        = true
