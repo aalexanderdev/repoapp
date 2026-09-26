@@ -1,0 +1,79 @@
+# Apaga (0 réplicas) el deployment de dev fuera de horario laboral y lo
+# vuelve a encender por la mañana. Ahorra cómputo en entornos que no
+# necesitan estar activos 24/7 (FinOps). Ajustar horarios/timezone según
+# el equipo. Requiere un ServiceAccount con permiso para "patch" el
+# deployment en el namespace demo-app.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: finops-scaler
+  namespace: demo-app
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: finops-scaler-role
+  namespace: demo-app
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    verbs: ["get", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: finops-scaler-binding
+  namespace: demo-app
+subjects:
+  - kind: ServiceAccount
+    name: finops-scaler
+    namespace: demo-app
+roleRef:
+  kind: Role
+  name: finops-scaler-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: finops-scale-down
+  namespace: demo-app
+spec:
+  # 21:00 de lunes a viernes (hora del cluster)
+  schedule: "0 21 * * 1-5"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: finops-scaler
+          restartPolicy: OnFailure
+          containers:
+            - name: kubectl
+              image: bitnami/kubectl:1.29
+              command:
+                - /bin/sh
+                - -c
+                - kubectl scale deployment demo-app -n demo-app --replicas=0
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: finops-scale-up
+  namespace: demo-app
+spec:
+  # 07:00 de lunes a viernes (hora del cluster)
+  schedule: "0 7 * * 1-5"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: finops-scaler
+          restartPolicy: OnFailure
+          containers:
+            - name: kubectl
+              image: bitnami/kubectl:1.29
+              command:
+                - /bin/sh
+                - -c
+                - kubectl scale deployment demo-app -n demo-app --replicas=2
