@@ -1,0 +1,11 @@
+**/__pycache__
+**/*.pyc
+.git
+.github
+terraform
+k8s
+monitoring
+docs
+*.md
+.venv
+tests

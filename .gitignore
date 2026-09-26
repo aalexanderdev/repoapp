@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.coverage
+coverage.xml
+
+# Terraform
+terraform/**/.terraform/
+terraform/**/*.tfstate
+terraform/**/*.tfstate.backup
+terraform/**/.terraform.lock.hcl
+terraform/terraform.tfvars
+terraform/backend.tfvars
+*.tfplan
+
+# Secretos / entornos locales
+.env
+*.pem
+kubeconfig
+
+# Reportes de seguridad generados localmente
+bandit-report.json
+trivy-results.sarif
+report_html.html
