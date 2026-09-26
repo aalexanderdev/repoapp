@@ -1,0 +1,38 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: demo-app-alerts
+  namespace: demo-app
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: demo-app.rules
+      rules:
+        - alert: DemoAppHighErrorRate
+          expr: sum(rate(app_requests_total{status=~"5.."}[5m])) > 0.1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Tasa de errores elevada en demo-app"
+            description: "Más de 0.1 req/s con status 5xx en los últimos 5 minutos."
+
+        - alert: DemoAppPodDown
+          expr: kube_deployment_status_replicas_available{namespace="demo-app", deployment="demo-app"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "demo-app sin réplicas disponibles"
+
+        # Alerta de FinOps: detecta que el cluster quedó escalado al máximo
+        # de forma sostenida, lo que puede indicar sobre-provisión o un bug.
+        - alert: DemoAppMaxReplicasSustained
+          expr: kube_horizontalpodautoscaler_status_current_replicas{namespace="demo-app"} >= 8
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "HPA de demo-app al máximo por más de 30 minutos"
+            description: "Revisar si el tráfico es real o si hay un problema que genera carga innecesaria (impacto en costos)."
