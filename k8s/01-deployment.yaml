@@ -19,6 +19,8 @@ spec:
         prometheus.io/path: "/metrics"
         prometheus.io/port: "8080"
     spec:
+      imagePullSecrets:
+        - name: ghcr-secret
       containers:
         - name: demo-app
           # Imagen publicada en GitHub Container Registry (GHCR) por el pipeline CI/CD
@@ -36,6 +38,9 @@ spec:
             limits:
               cpu: "300m"
               memory: "256Mi"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           readinessProbe:
             httpGet:
               path: /health
@@ -52,5 +57,8 @@ spec:
             runAsNonRoot: true
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
+      volumes:
+        - name: tmp
+          emptyDir: {}
       securityContext:
         fsGroup: 1000
