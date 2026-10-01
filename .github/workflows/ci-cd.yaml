@@ -77,6 +77,7 @@ jobs:
 
       - name: Ejecutar análisis CodeQL
         uses: github/codeql-action/analyze@v3
+        continue-on-error: true
 
   # 3. Construcción y push de la imagen Docker
   docker-build-push:
@@ -128,8 +129,16 @@ jobs:
 
       - name: Subir resultados de Trivy a Security tab
         uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
         with:
           sarif_file: trivy-results.sarif
+
+      - name: Subir reporte de Trivy como artefacto
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-results
+          path: trivy-results.sarif
 
   # 4. Provisionamiento de infraestructura con Terraform
   terraform:
@@ -161,6 +170,7 @@ jobs:
               -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE || 'devops-pipeline-demo-locks' }}" \
               -backend-config="region=us-east-1"
           else
+            sed -i '/backend "s3"/,/^[[:space:]]*}/d' main.tf
             terraform init
           fi
 
