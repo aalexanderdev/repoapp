@@ -24,3 +24,7 @@ kubeconfig
 bandit-report.json
 trivy-results.sarif
 report_html.html
+
+# Monitoreo local para capturas
+docker-compose.monitoring.yml
+monitoring/local/

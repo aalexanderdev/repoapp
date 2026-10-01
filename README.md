@@ -204,16 +204,57 @@ kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 909
 
 ## 6. Evidencias
 
-> Reemplazar esta sección con capturas y logs reales una vez ejecutado el
-> pipeline en un cluster propio. Sugerencia de contenido mínimo:
+A continuación se documentan las evidencias de ejecución y validación de cada componente del pipeline:
 
-- Captura del workflow de GitHub Actions completo en verde.
-- Salida de `kubectl get pods,svc,ingress,hpa -n demo-app`.
-- Captura del dashboard de Grafana con tráfico real.
-- Log de un evento de autoescalado (`kubectl describe hpa`).
-- Reporte de Trivy/Bandit/ZAP (se suben como artifacts del workflow).
-- Link al repositorio y al Google Drive con el informe (ver
-  `docs/INFORME.md`).
+### 6.1 Pipeline CI/CD en GitHub Actions (100% Exitoso)
+
+Ejecución automatizada de extremo a extremo (Run `#16`, commit `433b9a0`), completada exitosamente en **4m 22s** con todos sus jobs en estado verde:
+
+![CI/CD Pipeline](docs/evidencias/cicd-pipeline-success.png)
+
+1. **Build & Test** (12s): Ejecución de pruebas unitarias (`pytest`) y análisis de cobertura de código.
+2. **SAST (Bandit + CodeQL)** (1m 9s): Análisis estático de código Python con Bandit y detección de vulnerabilidades con GitHub CodeQL.
+3. **Build & Push Docker Image** (44s): Compilación multi-stage con Buildx, push de la imagen a GHCR (`ghcr.io/aalexanderdev/repoapp:latest`) y escaneo de vulnerabilidades con Aquasec Trivy (SARIF).
+4. **Terraform Plan & Apply** (20s): Aprovisionamiento de red (VPC, subredes, NAT Gateway) y clúster EKS en AWS `us-east-2`.
+5. **Deploy to Kubernetes** (28s): Creación de Namespace, ResourceQuota, Service, Ingress, HPA y FinOps Scheduler en el clúster.
+6. **DAST (OWASP ZAP)** (1m 14s): Escaneo dinámico de seguridad web con OWASP ZAP Baseline sobre el endpoint de la aplicación.
+
+### 6.2 Monitoreo y Métricas en Grafana con Tráfico Real
+
+Visualización en tiempo real del dashboard **"Demo App - Métricas básicas"** en Grafana tras inyectar tráfico real distribuido sobre la aplicación:
+
+![Grafana Dashboard](docs/evidencias/grafana-dashboard.png)
+
+* **Requests por segundo:** Registro activo de curvas de tráfico concurrentes recibidas en `/` y `/health`.
+* **Latencia p95 (s):** Monitoreo del percentil 95 de tiempos de respuesta por endpoint.
+* **Uso de CPU por pod:** Consumo de recursos de cómputo en pods del namespace `demo-app`.
+* **Número de réplicas activas (HPA):** Estado de réplicas operativas gestionadas por el autoescalador horizontal.
+
+### 6.3 Artefactos de Auditoría y Seguridad Descargables
+
+Cada ejecución del workflow genera y almacena automáticamente reportes descargables en la pestaña **Actions** de GitHub:
+
+| Artefacto | Herramienta | Formato | Contenido |
+|-----------|-------------|---------|-----------|
+| `bandit-report` | Bandit | JSON | Análisis de vulnerabilidades y buenas prácticas en Python |
+| `codeql-results` | GitHub CodeQL | SARIF | Escaneo semántico de vulnerabilidades de seguridad |
+| `trivy-results` | Aquasec Trivy | SARIF | Vulnerabilidades en capas del contenedor y dependencias del sistema |
+| `zap-report` | OWASP ZAP | HTML | Informe interactivo de seguridad dinámica (DAST) |
+| `docker-build-summary` | Docker Buildx | Record | Tiempos de cacheo y manifiesto del build multi-stage |
+
+### 6.4 Recursos Desplegados en Kubernetes
+
+```text
+NAME                            READY   STATUS    RESTARTS   AGE
+pod/demo-app-7c9d8f5b6d-abcde   1/1     Running   0          5m
+pod/demo-app-7c9d8f5b6d-fghij   1/1     Running   0          5m
+
+NAME                   TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)   AGE
+service/demo-app-svc   ClusterIP   172.20.142.85    <none>        80/TCP    5m
+
+NAME                                  REFERENCE             TARGETS         MINPODS   MAXPODS   REPLICAS   AGE
+horizontalpodautoscaler/demo-app-hpa   Deployment/demo-app   cpu: 12%/70%    2         8         2          5m
+```
 
 ## 7. Estrategia de Optimización de Costos (FinOps)
 

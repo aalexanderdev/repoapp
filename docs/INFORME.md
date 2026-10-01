@@ -178,9 +178,9 @@ sección de evidencias preparada para documentar capturas y logs de ejecución.
 - [x] Manifiestos de Kubernetes: Deployment, Service, Ingress, HPA.
 - [x] Configuración de Prometheus + Grafana con dashboard y alertas.
 - [x] README con instrucciones de uso y validación.
-- [ ] Evidencias reales (capturas/logs) — pendientes de generar al ejecutar
-      el pipeline contra un cluster propio; ver plantilla en la sección 6
-      del README.
+- [x] Evidencias reales: capturas del pipeline CI/CD en verde (Run #16) y del
+      dashboard de Grafana con tráfico real en `docs/evidencias/`, junto con
+      reportes descargables de SAST, DAST y escaneo de imagen.
 
 ## 5. Enlaces
  
