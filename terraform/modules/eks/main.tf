@@ -1,5 +1,5 @@
 resource "aws_iam_role" "cluster" {
-  name = "${var.project_name}-${var.environment}-eks-cluster-role"
+  name_prefix = "${var.project_name}-${var.environment}-cluster-"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -35,7 +35,7 @@ resource "aws_eks_cluster" "this" {
 }
 
 resource "aws_iam_role" "node" {
-  name = "${var.project_name}-${var.environment}-eks-node-role"
+  name_prefix = "${var.project_name}-${var.environment}-node-"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -65,8 +65,8 @@ resource "aws_iam_role_policy_attachment" "node_ecr" {
 # Node group con autoescalado: clave para la parte de FinOps
 # (min/max/desired permiten escalar a la baja fuera de horario de uso).
 resource "aws_eks_node_group" "default" {
-  cluster_name    = aws_eks_cluster.this.name
-  node_group_name = "${var.project_name}-${var.environment}-ng"
+  cluster_name           = aws_eks_cluster.this.name
+  node_group_name_prefix = "${var.project_name}-${var.environment}-ng-"
   node_role_arn   = aws_iam_role.node.arn
   subnet_ids      = var.private_subnet_ids
   instance_types  = [var.node_instance_type]
