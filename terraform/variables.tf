@@ -35,9 +35,9 @@ variable "cluster_version" {
 }
 
 variable "node_instance_type" {
-  description = "Tipo de instancia para los nodos worker"
+  description = "Tipo de instancia para los nodos worker (t3.micro para Free Tier)"
   type        = string
-  default     = "t3.medium"
+  default     = "t3.micro"
 }
 
 variable "node_min_size" {

@@ -69,7 +69,7 @@ resource "aws_eks_node_group" "default" {
   node_group_name_prefix = "${var.project_name}-${var.environment}-ng-"
   node_role_arn   = aws_iam_role.node.arn
   subnet_ids      = var.private_subnet_ids
-  instance_types  = [var.node_instance_type]
+  instance_types  = [var.node_instance_type, "t2.micro"]
 
   # Usar ON_DEMAND para garantizar provisión inmediata de nodos
   capacity_type = "ON_DEMAND"
