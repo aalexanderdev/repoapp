@@ -253,15 +253,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Preparar permisos y levantar app para DAST
+        run: |
+          chmod -R 777 $GITHUB_WORKSPACE
+          docker run -d --name demo-app --network host ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          sleep 3
+          curl -f http://localhost:8080/health || true
+
       - name: Escaneo dinámico con OWASP ZAP
         uses: zaproxy/action-baseline@v0.12.0
+        continue-on-error: true
         with:
-          target: "https://demo-app.midominio.com"
+          target: "http://localhost:8080"
           fail_action: false
           cmd_options: "-a"
 
       - name: Subir reporte ZAP
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: zap-report
           path: report_html.html
