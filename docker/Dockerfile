@@ -18,15 +18,15 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 # ---------- Etapa 2: imagen final, mínima ----------
 FROM python:3.12-slim AS runtime
 
-# Usuario no root por seguridad
-RUN addgroup --system app && adduser --system --ingroup app app
+# Usuario no root con UID numérico explícito (requerido por runAsNonRoot en Kubernetes)
+RUN addgroup --system --gid 1000 app && adduser --system --uid 1000 --ingroup app app
 
 WORKDIR /app
 
 # Copiamos solo las dependencias instaladas (no build tools, no cache)
 COPY --from=builder /install /usr/local
 
-COPY app/main.py .
+COPY --chown=1000:1000 app/main.py .
 
 ENV PYTHONUNBUFFERED=1 \
     PORT=8080 \
@@ -34,7 +34,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 EXPOSE 8080
 
-USER app
+USER 1000:1000
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')" || exit 1
