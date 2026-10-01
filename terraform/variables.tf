@@ -13,7 +13,7 @@ variable "environment" {
 variable "aws_region" {
   description = "Región de AWS donde se provisiona la infraestructura"
   type        = string
-  default     = "us-east-1"
+  default     = "us-east-2"
 }
 
 variable "vpc_cidr" {
@@ -25,7 +25,7 @@ variable "vpc_cidr" {
 variable "availability_zones" {
   description = "Zonas de disponibilidad a usar"
   type        = list(string)
-  default     = ["us-east-1a", "us-east-1b"]
+  default     = ["us-east-2a", "us-east-2b"]
 }
 
 variable "cluster_version" {

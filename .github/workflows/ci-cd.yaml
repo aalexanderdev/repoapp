@@ -10,6 +10,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-2' }}
 
 permissions:
   contents: read
@@ -157,7 +158,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -165,10 +166,11 @@ jobs:
       - name: Terraform Init
         run: |
           if [ -n "${{ secrets.TF_STATE_BUCKET }}" ]; then
-            terraform init \
-              -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
-              -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE || 'devops-pipeline-demo-locks' }}" \
-              -backend-config="region=us-east-1"
+            INIT_ARGS="-backend-config=bucket=${{ secrets.TF_STATE_BUCKET }} -backend-config=region=${{ env.AWS_REGION }}"
+            if [ -n "${{ secrets.TF_LOCK_TABLE }}" ]; then
+              INIT_ARGS="$INIT_ARGS -backend-config=dynamodb_table=${{ secrets.TF_LOCK_TABLE }}"
+            fi
+            terraform init $INIT_ARGS
           else
             sed -i '/backend "s3"/,/^[[:space:]]*}/d' main.tf
             terraform init
@@ -198,10 +200,10 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Actualizar kubeconfig
-        run: aws eks update-kubeconfig --region us-east-1 --name devops-pipeline-demo-dev
+        run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name devops-pipeline-demo-dev
 
       - name: Aplicar manifiestos
         run: |
