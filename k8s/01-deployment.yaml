@@ -6,7 +6,7 @@ metadata:
   labels:
     app: demo-app
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: demo-app
@@ -33,11 +33,11 @@ spec:
               value: "1.0.0"
           resources:
             requests:
-              cpu: "100m"
-              memory: "128Mi"
+              cpu: "20m"
+              memory: "64Mi"
             limits:
-              cpu: "300m"
-              memory: "256Mi"
+              cpu: "200m"
+              memory: "128Mi"
           volumeMounts:
             - name: tmp
               mountPath: /tmp

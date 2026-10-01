@@ -202,8 +202,14 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Actualizar kubeconfig
-        run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name devops-pipeline-demo-dev
+      - name: Actualizar kubeconfig y verificar nodos
+        run: |
+          aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name devops-pipeline-demo-dev
+          echo "=== Esperando a que los nodos worker estén en estado Ready ==="
+          kubectl wait --for=condition=Ready nodes --all --timeout=180s || true
+          kubectl get nodes -o wide
+          echo "=== Habilitando prefix delegation en VPC CNI ==="
+          kubectl set env daemonset aws-node -n kube-system ENABLE_PREFIX_DELEGATION=true || true
 
       - name: Aplicar manifiestos
         run: |
@@ -219,6 +225,7 @@ jobs:
           kubectl apply -f k8s/02-service.yaml
           kubectl apply -f k8s/03-ingress.yaml
           kubectl apply -f k8s/04-hpa.yaml
+          kubectl apply -f k8s/06-finops-scheduler.yaml
 
       - name: Actualizar imagen del deployment
         run: |
@@ -230,7 +237,10 @@ jobs:
         run: |
           kubectl rollout status deployment/demo-app -n demo-app --timeout=300s || {
             echo "=== Diagnóstico de pods en demo-app ==="
-            kubectl get pods -n demo-app
+            kubectl get pods -n demo-app -o wide
+            echo "=== Eventos del namespace demo-app ==="
+            kubectl get events -n demo-app --sort-by='.metadata.creationTimestamp'
+            echo "=== Detalle de los pods ==="
             kubectl describe pods -n demo-app
             exit 1
           }

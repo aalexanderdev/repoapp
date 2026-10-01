@@ -43,7 +43,7 @@ variable "node_instance_type" {
 variable "node_min_size" {
   description = "Cantidad mínima de nodos (para autoescalado / FinOps)"
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "node_max_size" {
