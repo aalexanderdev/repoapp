@@ -55,9 +55,10 @@ módulos reutilizables:
   Internet Gateway, NAT Gateway y tablas de ruteo.
 - **`modules/eks`**: cluster EKS, roles IAM para el plano de control y para
   los nodos, y un node group con `scaling_config` (min/max/desired) que
-  permite autoescalar la capa de cómputo. En entornos no productivos se usa
-  `capacity_type = "SPOT"` para reducir costos (FinOps aplicado también a
-  nivel de infraestructura).
+  permite autoescalar la capa de cómputo. En entornos no productivos se
+  soporta `capacity_type = "SPOT"` o instancias compatibles con AWS Free Tier
+  (`t3.micro`/`t2.micro` en `us-east-2`) para reducir costos (FinOps aplicado
+  también a nivel de infraestructura).
 
 Todas las variables están centralizadas en `variables.tf` (raíz) con valores
 por defecto sensatos y un archivo `terraform.tfvars.example` documentado; los
@@ -76,8 +77,10 @@ mediante `needs`:
 3. **docker-build-push**: build multi-stage con Buildx y caché de GitHub
    Actions, push a GHCR, y escaneo de vulnerabilidades de la imagen con
    Trivy (resultados subidos a la pestaña *Security* del repo vía SARIF).
-4. **terraform**: `terraform init/validate/plan/apply` contra AWS, usando
-   credenciales desde `secrets.AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`.
+4. **terraform**: `terraform init/validate/plan/apply` contra AWS (región `us-east-2`),
+   usando backend remoto en S3 con bloqueo en DynamoDB mediante los secretos
+   `secrets.AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `TF_STATE_BUCKET` y
+   `TF_LOCK_TABLE`.
 5. **deploy**: actualiza `kubeconfig` y aplica los manifiestos de `k8s/`,
    luego actualiza la imagen del Deployment y espera el `rollout`.
 6. **dast**: análisis dinámico con OWASP ZAP (`zap-baseline`) contra la URL
@@ -130,23 +133,26 @@ Manifiestos en `k8s/`:
 
 Medidas aplicadas en distintas capas:
 
-- **Infraestructura**: node group de EKS con `min/max/desired size` y uso de
-  instancias Spot en entornos no productivos.
+- **Infraestructura**: node group de EKS en `us-east-2` con `min/max/desired size`,
+  utilizando instancias compatibles con AWS Free Tier (`t3.micro`/`t2.micro`) y soporte
+  para instancias Spot en entornos no productivos.
 - **Aplicación**: HPA con ventana de estabilización para evitar escalados
   innecesarios; `ResourceQuota`/`LimitRange` para prevenir sobre-provisión.
 - **Operación**: `CronJob`s de apagado/encendido automático fuera de horario
-  laboral en `dev`.
-- **Observabilidad**: alerta específica para detectar HPA saturado de forma
-  sostenida, que puede traducirse en gasto innecesario si no corresponde a
-  tráfico real.
+  laboral en `dev` (escala a 0 a las 21:00 y restablece a las 07:00).
+- **Observabilidad**: alertas específicas en Prometheus (`FinOpsHighPodCount`,
+  `FinOpsMemoryLeakRisk`) para detectar anomalías de gasto o saturación.
 
 ### 2.9 Documentación
 
-Se escribió un `README.md` con: descripción del proyecto, estructura del
-repositorio, instrucciones para correr localmente (Python y Docker),
-instrucciones para desplegar en un entorno de pruebas (Terraform + kubectl +
-Helm), pasos de validación de despliegue/autoescalado/monitoreo, y una
-sección de evidencias a completar con capturas reales del propio despliegue.
+Se escribió un `README.md` exhaustivo con: descripción del proyecto, estructura
+del repositorio, instrucciones para correr localmente (Python y Docker), tabla
+de secretos requeridos en GitHub Actions para garantizar replicabilidad sin
+asistencia humana, instrucciones para desplegar en un entorno de pruebas
+(Terraform en `us-east-2` + kubectl + Helm), pasos de validación de
+despliegue/autoescalado/monitoreo, sección dedicada a la estrategia integral de
+FinOps (costos en infraestructura, aplicación, operación y observabilidad), y una
+sección de evidencias preparada para documentar capturas y logs de ejecución.
 
 ## 3. Buenas prácticas de seguridad aplicadas
 
