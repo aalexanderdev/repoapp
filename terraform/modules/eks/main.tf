@@ -71,8 +71,8 @@ resource "aws_eks_node_group" "default" {
   subnet_ids      = var.private_subnet_ids
   instance_types  = [var.node_instance_type]
 
-  # Instancias Spot para reducir costos en entornos no productivos (FinOps)
-  capacity_type = var.environment == "prod" ? "ON_DEMAND" : "SPOT"
+  # Usar ON_DEMAND para garantizar provisión inmediata de nodos
+  capacity_type = "ON_DEMAND"
 
   scaling_config {
     min_size     = var.node_min_size
