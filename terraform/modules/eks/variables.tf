@@ -7,7 +7,8 @@ variable "environment" {
 }
 
 variable "cluster_version" {
-  type = string
+  type    = string
+  default = null
 }
 
 variable "vpc_id" {
