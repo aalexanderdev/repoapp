@@ -87,8 +87,20 @@ bandit -r app
 
 ## 4. Desplegar en un entorno de pruebas
 
-### 4.1 Provisionar la infraestructura
- 
+### 4.1 Configuración de Secretos en GitHub Actions (Replicabilidad CI/CD)
+
+Para que el pipeline de GitHub Actions se ejecute de extremo a extremo sin intervención manual, deben configurarse los siguientes secretos en el repositorio (**Settings** → **Secrets and variables** → **Actions**):
+
+| Secreto | Descripción | Requerido |
+|---------|-------------|-----------|
+| `AWS_ACCESS_KEY_ID` | Access Key de IAM con permisos para VPC, EKS, EC2, IAM, S3 y DynamoDB | Sí |
+| `AWS_SECRET_ACCESS_KEY` | Secret Key correspondiente a la Access Key de AWS | Sí |
+| `TF_STATE_BUCKET` | Nombre del bucket S3 en `us-east-2` para el backend remoto de Terraform | Sí |
+| `TF_LOCK_TABLE` | Nombre de la tabla DynamoDB en `us-east-2` para el state locking | Sí |
+| `GITHUB_TOKEN` | Token provisto automáticamente por GitHub Actions (lectura/escritura de packages en GHCR) | Automático |
+
+### 4.2 Provisionar la infraestructura
+
 ```bash
 cd terraform
 cp terraform.tfvars.example terraform.tfvars   # ajustar variables de infraestructura
@@ -104,10 +116,10 @@ con un node group que autoescala (`node_min_size` / `node_max_size`).
 Al finalizar, Terraform imprime el comando para configurar `kubectl`:
 
 ```bash
-aws eks update-kubeconfig --region us-east-1 --name devops-pipeline-demo-dev
+aws eks update-kubeconfig --region us-east-2 --name devops-pipeline-demo-dev
 ```
 
-### 4.2 Desplegar la aplicación
+### 4.3 Desplegar la aplicación
 
 ```bash
 kubectl apply -f k8s/00-namespace.yaml
@@ -119,7 +131,7 @@ kubectl apply -f k8s/04-hpa.yaml
 kubectl apply -f k8s/06-finops-scheduler.yaml
 ```
 
-### 4.3 Instalar monitoreo
+### 4.4 Instalar monitoreo
 
 ```bash
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
@@ -131,7 +143,7 @@ kubectl apply -f monitoring/service-monitor.yaml
 kubectl apply -f monitoring/prometheus-rules.yaml
 ```
 
-Todo este flujo (secciones 4.1 a 4.3, salvo la parte de monitoreo que se
+Todo este flujo (secciones 4.2 a 4.4, salvo la parte de monitoreo que se
 instala una vez) es exactamente lo que automatiza el workflow de GitHub
 Actions en cada push a `main`.
 
@@ -203,7 +215,33 @@ kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 909
 - Link al repositorio y al Google Drive con el informe (ver
   `docs/INFORME.md`).
 
-## 7. Seguridad y buenas prácticas aplicadas
+## 7. Estrategia de Optimización de Costos (FinOps)
+
+El proyecto implementa prácticas de ingeniería y optimización de costos en múltiples niveles para garantizar eficiencia de recursos y minimizar el gasto en infraestructura cloud:
+
+1. **Instancias Free Tier en AWS EKS**:
+   - Selección de tipos de instancia compatibles con el nivel gratuito de AWS (`t3.micro` / `t2.micro`) para el Node Group en la región `us-east-2`.
+   - Dimensionamiento mínimo (`min_size = 1`, `max_size = 3`) que escala bajo demanda únicamente ante necesidad operativa real.
+
+2. **Gobierno y Límite de Recursos en Kubernetes (`ResourceQuota` y `LimitRange`)**:
+   - Manifiesto `k8s/05-resource-quota.yaml`.
+   - Fija cuotas estrictas de consumo por namespace (`requests.cpu: 500m`, `limits.cpu: 1000m`, `requests.memory: 512Mi`, `limits.memory: 1Gi`).
+   - Previene el sobreconsumo ("noisy neighbors") y costos imprevistos ocasionados por fugas de memoria o abuso de CPU.
+
+3. **Autoescalado Eficiente con HPA**:
+   - Manifiesto `k8s/04-hpa.yaml` con escalado horizontal basado en utilización de CPU (umbral al 70%).
+   - Incorpora ventana de estabilización (`stabilizationWindowSeconds: 300` para scale down) que evita el "flapping" (oscilación rápida de creación/destrucción de pods) y reduce la fricción de aprovisionamiento de nodos.
+
+4. **Apagado y Encendido Programado Fuera de Horario (Off-Hours Scheduling)**:
+   - Configurado en `k8s/06-finops-scheduler.yaml` mediante `CronJob` nativos de Kubernetes.
+   - Apaga automáticamente las cargas de trabajo escalando el Deployment a 0 réplicas a las 21:00 hs (lunes a viernes).
+   - Restablece las réplicas operativas mínimas a las 07:00 hs (lunes a viernes).
+   - Genera un ahorro proyectado superior al 50% en horas de cómputo en entornos no productivos (desarrollo y testing).
+
+5. **Alertas de Monitoreo Preventivo de Costos**:
+   - Definidas en `monitoring/prometheus-rules.yaml` (`FinOpsHighPodCount`, `FinOpsMemoryLeakRisk`), notificando proactivamente si el HPA permanece al límite de pods o si el consumo de memoria crece sostenidamente sin tráfico.
+
+## 8. Seguridad y buenas prácticas aplicadas
 
 - Imagen Docker corre como usuario no root, con `readOnlyRootFilesystem`.
 - Multi-stage build: la imagen final no contiene compiladores ni cache de pip.
@@ -216,7 +254,7 @@ kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 909
 - CronJobs de FinOps que apagan réplicas fuera de horario en entornos no
   productivos.
 
-## 8. Notas
+## 9. Notas
 
 Este repositorio es una plantilla de referencia pensada para ser adaptada:
 reemplazar el dominio del Ingress, el nombre de la imagen del registry, la
