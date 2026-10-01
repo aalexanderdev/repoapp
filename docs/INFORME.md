@@ -185,4 +185,4 @@ sección de evidencias preparada para documentar capturas y logs de ejecución.
 ## 5. Enlaces
  
 - Repositorio: https://github.com/aalexanderdev/repoapp
-- Link de Google Drive con este informe y evidencias: _(completar)_
+- Link de Google Drive con este informe y evidencias: https://docs.google.com/document/d/1juL3D9j6JXuB3G4sEd5jSOxFpBFv8_PbzbqEeVzDbIo/edit?usp=sharing
